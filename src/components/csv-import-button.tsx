@@ -11,10 +11,11 @@ import { useToast } from "@/hooks/use-toast";
 
 interface CsvImportButtonProps {
   onImport: (flashcards: FlashcardType[]) => void;
+  buttonText?: string;
   disabled?: boolean;
 }
 
-export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonProps) {
+export function CsvImportButton({ onImport, buttonText = "Import Flashcards (CSV)", disabled = false }: CsvImportButtonProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -44,10 +45,6 @@ export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonP
         .slice(1)
         .filter(line => line.trim() !== "")
         .map((line, index) => {
-          const values = line.split(","); // Basic CSV split, consider a library for robustness
-          
-          // Handle cases where values might be wrapped in quotes or contain commas within quotes
-          // This is a simplified parser. For complex CSV, a proper library is better.
           const parseCsvRow = (rowString: string): string[] => {
             const result: string[] = [];
             let currentField = '';
@@ -56,7 +53,6 @@ export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonP
               const char = rowString[i];
               if (char === '"') {
                 if (inQuotes && i + 1 < rowString.length && rowString[i+1] === '"') {
-                  // Escaped quote
                   currentField += '"';
                   i++; 
                 } else {
@@ -69,7 +65,7 @@ export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonP
                 currentField += char;
               }
             }
-            result.push(currentField); // Add the last field
+            result.push(currentField);
             return result;
           };
           
@@ -78,16 +74,11 @@ export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonP
           let frontValue = parsedValues[frontIndex]?.trim() || "";
           let backValue = parsedValues[backIndex]?.trim() || "";
 
-          // Remove all double quotes from front and back values if they are not part of escaped quotes
-          // The regex /^\s*"|"\s*$/g targets leading/trailing quotes possibly with spaces.
-          // For internal quotes, if any remain after parsing they might be intentional.
-          // However, the request was to remove *all* double quotes from the final values.
           frontValue = frontValue.replace(/"/g, "");
           backValue = backValue.replace(/"/g, "");
 
-
           return {
-            id: `card-${Date.now()}-${index}`, // Simple unique ID
+            id: `card-${Date.now()}-${index}`, 
             front: frontValue,
             back: backValue,
           };
@@ -97,11 +88,8 @@ export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonP
         throw new Error("No valid flashcards found in the CSV file.");
       }
 
-      onImport(importedFlashcards);
-      toast({
-        title: "Import Successful",
-        description: `${importedFlashcards.length} flashcards imported.`,
-      });
+      onImport(importedFlashcards); // Simplified callback
+      // Toast messages can be handled by the calling component if more context is needed
     } catch (error) {
       console.error("Error importing CSV:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during import.";
@@ -110,10 +98,9 @@ export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonP
         title: "Import Failed",
         description: errorMessage,
       });
-      onImport([]); // Clear existing cards on error or pass empty
+      // onImport([]); // Caller decides how to handle error, e.g. not creating a deck
     } finally {
       setIsLoading(false);
-      // Reset file input to allow re-uploading the same file
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -138,7 +125,7 @@ export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonP
         aria-busy={isLoading}
       >
         <UploadCloud className="mr-2 h-4 w-4" />
-        {isLoading ? "Importing..." : "Import Flashcards (CSV)"}
+        {isLoading ? "Importing..." : buttonText}
       </Button>
     </>
   );

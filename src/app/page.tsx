@@ -1,170 +1,144 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { CsvImportButton } from "@/components/csv-import-button";
-import { FlashcardDisplay } from "@/components/flashcard-display";
-import { NavigationControls } from "@/components/navigation-controls";
-import type { FlashcardType } from "@/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { BookOpenText, Shuffle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useDecks } from '@/hooks/use-decks';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { FilePlus, Trash2, BookOpen, Edit3 } from 'lucide-react';
+import { ImportDeckDialog } from '@/components/dialogs/import-deck-dialog';
+import { DeleteDeckDialog } from '@/components/dialogs/delete-deck-dialog';
+import type { Deck, FlashcardType } from '@/types';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
-type AnimationState = "idle" | "destroying" | "appearing";
-const ANIMATION_DURATION = 500; // ms
-
-export default function FlashFlowPage() {
-  const [flashcards, setFlashcards] = useState<FlashcardType[]>([]);
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [isClient, setIsClient] = useState(false);
-  const [animationState, setAnimationState] = useState<AnimationState>("idle");
+export default function DeckManagementPage() {
+  const { decks, addDeck, deleteDeck, isLoaded } = useDecks();
+  const [isImportDeckDialogOpen, setIsImportDeckDialogOpen] = useState(false);
+  const [deckToDelete, setDeckToDelete] = useState<Deck | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  const handleImport = (importedFlashcards: FlashcardType[]) => {
-    setFlashcards(importedFlashcards);
-    setCurrentCardIndex(0);
-    setIsFlipped(false);
-    setAnimationState("idle"); // Reset animation state on new import
+  const handleDeckImported = (name: string, flashcards: FlashcardType[]) => {
+    addDeck(name, flashcards);
+    toast({
+      title: 'Deck Imported',
+      description: `Deck "${name}" with ${flashcards.length} cards has been created.`,
+    });
+    setIsImportDeckDialogOpen(false);
   };
 
-  const changeCard = useCallback((direction: "next" | "prev") => {
-    if (flashcards.length === 0 || animationState !== "idle") return;
-
-    setAnimationState("destroying");
-
-    setTimeout(() => {
-      setIsFlipped(false);
-      if (direction === "next") {
-        setCurrentCardIndex((prevIndex) => (prevIndex + 1) % flashcards.length);
-      } else {
-        setCurrentCardIndex((prevIndex) =>
-          prevIndex === 0 ? flashcards.length - 1 : prevIndex - 1
-        );
-      }
-      setAnimationState("appearing");
-
-      setTimeout(() => {
-        setAnimationState("idle");
-      }, ANIMATION_DURATION);
-    }, ANIMATION_DURATION);
-  }, [flashcards.length, animationState]);
-
-  const handleNext = () => {
-    changeCard("next");
+  const openDeleteDialog = (deck: Deck) => {
+    setDeckToDelete(deck);
   };
 
-  const handlePrevious = () => {
-    changeCard("prev");
-  };
-
-  const handleFlip = () => {
-    if (flashcards.length === 0 || animationState !== "idle") return;
-    setIsFlipped((prevFlipped) => !prevFlipped);
-  };
-
-  const handleShuffle = () => {
-    if (flashcards.length <= 1 || animationState !== "idle") return;
-    
-    setAnimationState("destroying"); // Use similar animation for shuffle transition
-
-    setTimeout(() => {
-      const shuffledCards = [...flashcards];
-      for (let i = shuffledCards.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledCards[i], shuffledCards[j]] = [shuffledCards[j], shuffledCards[i]];
-      }
-      setFlashcards(shuffledCards);
-      setCurrentCardIndex(0);
-      setIsFlipped(false);
-      
-      setAnimationState("appearing");
+  const handleConfirmDelete = (deckId: string) => {
+    const deck = decks.find(d => d.id === deckId);
+    deleteDeck(deckId);
+    if (deck) {
       toast({
-        title: "Cards Shuffled",
-        description: "The order of your flashcards has been randomized.",
+        title: 'Deck Deleted',
+        description: `Deck "${deck.name}" has been deleted.`,
       });
-      setTimeout(() => {
-        setAnimationState("idle");
-      }, ANIMATION_DURATION);
-    }, ANIMATION_DURATION);
+    }
+    setDeckToDelete(null);
   };
-  
-  if (!isClient) {
-    return null; 
-  }
 
-  const currentCard = flashcards[currentCardIndex];
-  const isAnimating = animationState !== "idle";
+  if (!isLoaded) {
+    // Optional: Add a loading skeleton or spinner here
+    return (
+      <main className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-background text-foreground">
+        <header className="mb-8 text-center">
+          <h1 className="text-4xl md:text-5xl font-bold text-primary flex items-center justify-center">
+            <BookOpen size={48} className="mr-3 text-accent" />
+            FlashFlow Decks
+          </h1>
+          <p className="text-muted-foreground mt-2">Loading your flashcard decks...</p>
+        </header>
+      </main>
+    );
+  }
 
   return (
     <main className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-background text-foreground">
       <header className="mb-8 text-center">
         <h1 className="text-4xl md:text-5xl font-bold text-primary flex items-center justify-center">
-          <BookOpenText size={48} className="mr-3 text-accent" />
-          FlashFlow
+          <BookOpen size={48} className="mr-3 text-accent" />
+          FlashFlow Decks
         </h1>
-        <p className="text-muted-foreground mt-2">Your personal flashcard learning assistant.</p>
+        <p className="text-muted-foreground mt-2">Manage your flashcard decks or import new ones.</p>
       </header>
 
-      <div className="w-full max-w-xl md:max-w-2xl">
-        <section className="mb-8 flex justify-center space-x-4">
-          <CsvImportButton onImport={handleImport} disabled={isAnimating} />
-          <Button
-            onClick={handleShuffle}
-            disabled={flashcards.length <= 1 || isAnimating}
-            variant="outline"
-            aria-label="Shuffle cards"
-          >
-            <Shuffle className="mr-2 h-4 w-4" />
-            Shuffle Cards
-          </Button>
-        </section>
+      <section className="mb-8">
+        <Button onClick={() => setIsImportDeckDialogOpen(true)} size="lg">
+          <FilePlus className="mr-2 h-5 w-5" /> Import New Deck
+        </Button>
+      </section>
 
-        {flashcards.length > 0 && currentCard ? (
-          <Card className="shadow-xl overflow-hidden">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground text-center">
-                Card {currentCardIndex + 1} of {flashcards.length}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <FlashcardDisplay
-                frontText={currentCard.front}
-                backText={currentCard.back}
-                isFlipped={isFlipped}
-                onFlip={handleFlip}
-                animationState={animationState}
-              />
-              <NavigationControls
-                onPrevious={handlePrevious}
-                onNext={handleNext}
-                onFlip={handleFlip}
-                canPrevious={flashcards.length > 1}
-                canNext={flashcards.length > 1}
-                isFlipped={isFlipped}
-                isAnimating={isAnimating}
-              />
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="shadow-lg">
-            <CardContent className="p-8 text-center">
-              <BookOpenText size={48} className="mx-auto mb-4 text-muted-foreground" />
-              <h2 className="text-xl font-semibold mb-2">No flashcards loaded</h2>
-              <p className="text-muted-foreground">
-                Import a CSV file with 'front' and 'back' columns to begin your learning session.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-      <footer className="mt-auto pt-8 text-center text-sm text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} FlashFlow. Happy learning!</p>
+      {decks.length === 0 ? (
+        <Card className="w-full max-w-md text-center shadow-lg">
+          <CardContent className="p-8">
+            <BookOpen size={48} className="mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2">No Decks Yet</h2>
+            <p className="text-muted-foreground">
+              Click "Import New Deck" to get started.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-5xl">
+          {decks.sort((a,b) => b.updatedAt - a.updatedAt).map((deck) => (
+            <Card key={deck.id} className="shadow-lg flex flex-col">
+              <CardHeader>
+                <CardTitle className="truncate">{deck.name}</CardTitle>
+                <CardDescription>
+                  {deck.flashcards.length} card{deck.flashcards.length !== 1 ? 's' : ''}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow">
+                <p className="text-sm text-muted-foreground">
+                  Last updated: {format(new Date(deck.updatedAt), "MMM d, yyyy HH:mm")}
+                </p>
+              </CardContent>
+              <CardFooter className="flex justify-between items-center gap-2">
+                <Link href={`/study/${deck.id}`} passHref legacyBehavior>
+                  <Button variant="default" asChild>
+                    <a><BookOpen className="mr-2 h-4 w-4" /> Study</a>
+                  </Button>
+                </Link>
+                {/* Future: Rename button */}
+                {/* <Button variant="outline" size="icon" aria-label="Rename deck">
+                  <Edit3 className="h-4 w-4" />
+                </Button> */}
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  onClick={() => openDeleteDialog(deck)}
+                  aria-label="Delete deck"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <ImportDeckDialog
+        isOpen={isImportDeckDialogOpen}
+        onOpenChange={setIsImportDeckDialogOpen}
+        onDeckImported={handleDeckImported}
+      />
+      {deckToDelete && (
+        <DeleteDeckDialog
+          isOpen={!!deckToDelete}
+          onOpenChange={() => setDeckToDelete(null)}
+          deck={deckToDelete}
+          onConfirmDelete={handleConfirmDelete}
+        />
+      )}
+       <footer className="mt-auto pt-8 text-center text-sm text-muted-foreground">
+        <p>&copy; {new Date().getFullYear()} FlashFlow. Manage your decks.</p>
       </footer>
     </main>
   );
