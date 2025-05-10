@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif; /* Updated to --font-sans */
 }
 
 @layer base {
@@ -68,6 +68,8 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    /* Ensure the mono font variable is available if needed elsewhere, though primary body font is --font-sans */
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11"; 
   }
 }
 

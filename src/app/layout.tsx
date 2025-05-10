@@ -5,13 +5,13 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({
-  variable: '--font-geist-sans', // Keep variable name for CSS compatibility
+  variable: '--font-sans', // Updated variable name
   subsets: ['latin'],
   display: 'swap',
 });
 
 const robotoMono = Roboto_Mono({
-  variable: '--font-geist-mono', // Keep variable name for CSS compatibility
+  variable: '--font-mono', // Updated variable name
   subsets: ['latin'],
   display: 'swap',
 });
@@ -35,3 +35,4 @@ export default function RootLayout({
     </html>
   );
 }
+

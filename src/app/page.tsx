@@ -6,13 +6,16 @@ import { FlashcardDisplay } from "@/components/flashcard-display";
 import { NavigationControls } from "@/components/navigation-controls";
 import type { FlashcardType } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BookOpenText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BookOpenText, Shuffle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function FlashFlowPage() {
   const [flashcards, setFlashcards] = useState<FlashcardType[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     setIsClient(true);
@@ -43,6 +46,25 @@ export default function FlashFlowPage() {
     if (flashcards.length === 0) return;
     setIsFlipped((prevFlipped) => !prevFlipped);
   };
+
+  const handleShuffle = () => {
+    if (flashcards.length <= 1) return;
+
+    // Fisher-Yates (Knuth) Shuffle Algorithm
+    const shuffledCards = [...flashcards];
+    for (let i = shuffledCards.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledCards[i], shuffledCards[j]] = [shuffledCards[j], shuffledCards[i]];
+    }
+
+    setFlashcards(shuffledCards);
+    setCurrentCardIndex(0);
+    setIsFlipped(false);
+    toast({
+      title: "Cards Shuffled",
+      description: "The order of your flashcards has been randomized.",
+    });
+  };
   
   if (!isClient) {
     // Render nothing or a loading indicator on the server to avoid hydration mismatch
@@ -62,8 +84,17 @@ export default function FlashFlowPage() {
       </header>
 
       <div className="w-full max-w-xl md:max-w-2xl">
-        <section className="mb-8 flex justify-center">
+        <section className="mb-8 flex justify-center space-x-4">
           <CsvImportButton onImport={handleImport} />
+          <Button
+            onClick={handleShuffle}
+            disabled={flashcards.length <= 1}
+            variant="outline"
+            aria-label="Shuffle cards"
+          >
+            <Shuffle className="mr-2 h-4 w-4" />
+            Shuffle Cards
+          </Button>
         </section>
 
         {flashcards.length > 0 && currentCard ? (
