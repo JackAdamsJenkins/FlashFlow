@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from "react";
@@ -43,10 +44,18 @@ export function CsvImportButton({ onImport }: CsvImportButtonProps) {
         .filter(line => line.trim() !== "")
         .map((line, index) => {
           const values = line.split(","); // Basic CSV split, consider a library for robustness
+          
+          let frontValue = values[frontIndex]?.trim() || "";
+          let backValue = values[backIndex]?.trim() || "";
+
+          // Remove all double quotes from front and back values
+          frontValue = frontValue.replace(/"/g, "");
+          backValue = backValue.replace(/"/g, "");
+
           return {
             id: `card-${Date.now()}-${index}`, // Simple unique ID
-            front: values[frontIndex]?.trim() || "",
-            back: values[backIndex]?.trim() || "",
+            front: frontValue,
+            back: backValue,
           };
         });
       
