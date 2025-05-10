@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -9,10 +10,11 @@ import { FlashcardDisplay } from "@/components/flashcard-display";
 import { NavigationControls } from "@/components/navigation-controls";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeftToLine, BookOpenText, Edit, Shuffle, Trash2 } from "lucide-react";
+import { ArrowLeftToLine, BookOpenText, Edit, Shuffle, Trash2, PlusCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DeleteCardDialog } from "@/components/dialogs/delete-card-dialog";
 import { EditCardDialog } from "@/components/dialogs/edit-card-dialog";
+import { AddCardDialog } from "@/components/dialogs/add-card-dialog";
 
 
 type AnimationState = "idle" | "destroying" | "appearing";
@@ -23,7 +25,7 @@ export default function StudyDeckPage() {
   const params = useParams();
   const deckId = typeof params.deckId === 'string' ? params.deckId : '';
   
-  const { getDeckById, updateDeck, deleteCardFromDeck, updateCardInDeck, isLoaded: isDecksDataLoaded } = useDecks();
+  const { getDeckById, updateDeck, deleteCardFromDeck, updateCardInDeck, addCardToDeck, isLoaded: isDecksDataLoaded } = useDecks();
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [flashcards, setFlashcards] = useState<FlashcardType[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
@@ -33,10 +35,11 @@ export default function StudyDeckPage() {
 
   const [cardToDelete, setCardToDelete] = useState<FlashcardType | null>(null);
   const [cardToEdit, setCardToEdit] = useState<FlashcardType | null>(null);
+  const [isAddCardDialogOpen, setIsAddCardDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (!isDecksDataLoaded) { // Wait for useDecks to finish loading its data
-      setCurrentDeck(null); // Ensure currentDeck is null while hook is loading
+    if (!isDecksDataLoaded) { 
+      setCurrentDeck(null); 
       return;
     }
 
@@ -44,7 +47,6 @@ export default function StudyDeckPage() {
       const deck = getDeckById(deckId);
       if (deck) {
         setCurrentDeck(deck);
-        // Flashcards will be set by the other useEffect that depends on currentDeck
         setCurrentCardIndex(0);
         setIsFlipped(false);
       } else {
@@ -53,31 +55,30 @@ export default function StudyDeckPage() {
           title: "Deck not found",
           description: "The requested deck could not be loaded.",
         });
-        setCurrentDeck(null); // Ensure currentDeck is null if not found
-        router.push('/'); // Redirect to home if deck not found
+        setCurrentDeck(null); 
+        router.push('/'); 
       }
     } else {
-      // No deckId, or decks not loaded yet
       setCurrentDeck(null);
     }
   }, [deckId, getDeckById, router, toast, isDecksDataLoaded]);
 
-  // Update flashcards in state if the deck's flashcards change (e.g. after edit/delete or initial load)
    useEffect(() => {
     if (currentDeck) {
       setFlashcards(currentDeck.flashcards);
-      // Adjust currentCardIndex if it's out of bounds after a deletion or if deck is empty
       if (currentDeck.flashcards.length > 0) {
         if (currentCardIndex >= currentDeck.flashcards.length) {
           setCurrentCardIndex(currentDeck.flashcards.length - 1);
+        } else if (currentCardIndex < 0) { // Ensure index is not negative if all cards are deleted then one is added
+           setCurrentCardIndex(0);
         }
       } else {
-        setCurrentCardIndex(0); // No cards, index is 0
+        setCurrentCardIndex(0); 
       }
     } else {
-      setFlashcards([]); // No current deck, no flashcards
+      setFlashcards([]); 
     }
-  }, [currentDeck, currentCardIndex]); // currentCardIndex is included to re-evaluate if it was out of bounds
+  }, [currentDeck, currentCardIndex]);
 
 
   const changeCard = useCallback((direction: "next" | "prev") => {
@@ -121,9 +122,8 @@ export default function StudyDeckPage() {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      // Update deck in localStorage through useDecks hook
       const updatedD = updateDeck(currentDeck.id, { flashcards: shuffled });
-      if (updatedD) setCurrentDeck(updatedD); // This will trigger flashcard state update via useEffect
+      if (updatedD) setCurrentDeck(updatedD); 
       
       setCurrentCardIndex(0);
       setIsFlipped(false);
@@ -139,9 +139,25 @@ export default function StudyDeckPage() {
 
   const handleDeleteCard = (cardId: string) => {
     if (!currentDeck) return;
+    const originalIndex = currentCardIndex;
+    const originalFlashcardsLength = currentDeck.flashcards.length;
+
     const updatedD = deleteCardFromDeck(currentDeck.id, cardId);
     if (updatedD) {
-      setCurrentDeck(updatedD); // This will trigger the useEffect to update flashcards state
+      setCurrentDeck(updatedD); 
+      // setCurrentDeck will trigger the useEffect to update flashcards and potentially currentCardIndex
+      // If the deleted card was the current one, and it wasn't the only card,
+      // try to stay on the "same" visual position or move to previous if it was last
+      if (updatedD.flashcards.length < originalFlashcardsLength && updatedD.flashcards.length > 0) {
+         if (originalIndex >= updatedD.flashcards.length) { // If last card was deleted
+            setCurrentCardIndex(updatedD.flashcards.length -1);
+         } else {
+            setCurrentCardIndex(originalIndex); // Stay at current index if possible (new card takes its place)
+         }
+      } else if (updatedD.flashcards.length === 0) {
+        setCurrentCardIndex(0);
+      }
+      setIsFlipped(false);
       toast({ title: "Card Deleted" });
     }
     setCardToDelete(null);
@@ -151,17 +167,29 @@ export default function StudyDeckPage() {
     if (!currentDeck) return;
     const updatedD = updateCardInDeck(currentDeck.id, cardId, { front, back });
      if (updatedD) {
-      setCurrentDeck(updatedD); // This will trigger the useEffect to update flashcards state
+      setCurrentDeck(updatedD); 
       toast({ title: "Card Updated" });
     }
     setCardToEdit(null);
   };
 
+  const handleAddCardConfirm = (front: string, back: string) => {
+    if (currentDeck) {
+      const updatedDeck = addCardToDeck(currentDeck.id, { front, back });
+      if (updatedDeck) {
+        setCurrentDeck(updatedDeck); // This will trigger useEffect to update flashcards
+        toast({
+          title: "Card Added",
+          description: "A new card has been added to the deck.",
+        });
+      }
+    }
+    setIsAddCardDialogOpen(false);
+  };
+
   const currentCard = flashcards[currentCardIndex];
   const isAnimating = animationState !== "idle";
 
-  // Display loading state if decks data isn't loaded yet OR if currentDeck is null (e.g. deckId invalid, or not found after load)
-  // but avoid showing loading if we are about to redirect.
   if (!isDecksDataLoaded && !currentDeck) {
     return (
       <main className="flex flex-col items-center justify-center min-h-screen p-8 bg-background text-foreground">
@@ -175,10 +203,6 @@ export default function StudyDeckPage() {
       </main>
     );
   }
-  // If isDecksDataLoaded is true, but currentDeck is still null, it means deckId was invalid or deck not found.
-  // The useEffect would have shown a toast and started a redirect. In this brief moment,
-  // or if router.push hasn't completed, we might fall through.
-  // Showing "Deck is Empty" or letting the main content render (which will then show "Deck is Empty") is fine.
 
   return (
     <main className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-background text-foreground">
@@ -189,12 +213,17 @@ export default function StudyDeckPage() {
               <ArrowLeftToLine className="mr-2 h-4 w-4" /> Decks
             </Button>
           </Link>
-          <h1 className="text-2xl md:text-3xl font-bold text-primary truncate px-4">
+          <h1 className="text-2xl md:text-3xl font-bold text-primary truncate px-2 sm:px-4 flex-shrink min-w-0">
             {currentDeck ? currentDeck.name : "Deck"}
           </h1>
-           <Button onClick={handleShuffle} disabled={flashcards.length <= 1 || isAnimating} variant="outline" size="sm">
-            <Shuffle className="mr-2 h-4 w-4" /> Shuffle
-          </Button>
+           <div className="flex gap-2 flex-shrink-0">
+            <Button onClick={() => setIsAddCardDialogOpen(true)} variant="outline" size="sm" disabled={!currentDeck || isAnimating}>
+              <PlusCircle className="mr-0 sm:mr-2 h-4 w-4" /> <span className="hidden sm:inline">Add Card</span>
+            </Button>
+            <Button onClick={handleShuffle} disabled={flashcards.length <= 1 || isAnimating} variant="outline" size="sm">
+              <Shuffle className="mr-0 sm:mr-2 h-4 w-4" /> <span className="hidden sm:inline">Shuffle</span>
+            </Button>
+           </div>
         </div>
       </header>
 
@@ -242,7 +271,7 @@ export default function StudyDeckPage() {
               </h2>
               <p className="text-muted-foreground">
                 {currentDeck 
-                  ? "This deck has no flashcards. You can add cards by editing the deck (feature coming soon) or re-importing."
+                  ? "This deck has no flashcards. Click 'Add Card' to add new cards."
                   : "The deck could not be loaded or does not exist."
                 }
               </p>
@@ -270,6 +299,13 @@ export default function StudyDeckPage() {
             onOpenChange={() => setCardToEdit(null)}
             card={cardToEdit}
             onConfirmUpdate={handleUpdateCard}
+        />
+      )}
+      {isAddCardDialogOpen && (
+        <AddCardDialog
+          isOpen={isAddCardDialogOpen}
+          onOpenChange={setIsAddCardDialogOpen}
+          onConfirmAdd={handleAddCardConfirm}
         />
       )}
 
