@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { CsvImportButton } from "@/components/csv-import-button";
 import { FlashcardDisplay } from "@/components/flashcard-display";
 import { NavigationControls } from "@/components/navigation-controls";
@@ -11,68 +11,95 @@ import { Button } from "@/components/ui/button";
 import { BookOpenText, Shuffle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+type AnimationState = "idle" | "destroying" | "appearing";
+const ANIMATION_DURATION = 500; // ms
+
 export default function FlashFlowPage() {
   const [flashcards, setFlashcards] = useState<FlashcardType[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [animationState, setAnimationState] = useState<AnimationState>("idle");
   const { toast } = useToast();
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-
   const handleImport = (importedFlashcards: FlashcardType[]) => {
     setFlashcards(importedFlashcards);
     setCurrentCardIndex(0);
     setIsFlipped(false);
+    setAnimationState("idle"); // Reset animation state on new import
   };
 
+  const changeCard = useCallback((direction: "next" | "prev") => {
+    if (flashcards.length === 0 || animationState !== "idle") return;
+
+    setAnimationState("destroying");
+
+    setTimeout(() => {
+      setIsFlipped(false);
+      if (direction === "next") {
+        setCurrentCardIndex((prevIndex) => (prevIndex + 1) % flashcards.length);
+      } else {
+        setCurrentCardIndex((prevIndex) =>
+          prevIndex === 0 ? flashcards.length - 1 : prevIndex - 1
+        );
+      }
+      setAnimationState("appearing");
+
+      setTimeout(() => {
+        setAnimationState("idle");
+      }, ANIMATION_DURATION);
+    }, ANIMATION_DURATION);
+  }, [flashcards.length, animationState]);
+
   const handleNext = () => {
-    if (flashcards.length === 0) return;
-    setIsFlipped(false); // Ensure the next card shown is front-facing
-    setCurrentCardIndex((prevIndex) => (prevIndex + 1) % flashcards.length);
+    changeCard("next");
   };
 
   const handlePrevious = () => {
-    if (flashcards.length === 0) return;
-    setIsFlipped(false); // Ensure the previous card shown is front-facing
-    setCurrentCardIndex((prevIndex) =>
-      prevIndex === 0 ? flashcards.length - 1 : prevIndex - 1
-    );
+    changeCard("prev");
   };
 
   const handleFlip = () => {
-    if (flashcards.length === 0) return;
+    if (flashcards.length === 0 || animationState !== "idle") return;
     setIsFlipped((prevFlipped) => !prevFlipped);
   };
 
   const handleShuffle = () => {
-    if (flashcards.length <= 1) return;
+    if (flashcards.length <= 1 || animationState !== "idle") return;
+    
+    setAnimationState("destroying"); // Use similar animation for shuffle transition
 
-    // Fisher-Yates (Knuth) Shuffle Algorithm
-    const shuffledCards = [...flashcards];
-    for (let i = shuffledCards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledCards[i], shuffledCards[j]] = [shuffledCards[j], shuffledCards[i]];
-    }
-
-    setFlashcards(shuffledCards);
-    setCurrentCardIndex(0);
-    setIsFlipped(false);
-    toast({
-      title: "Cards Shuffled",
-      description: "The order of your flashcards has been randomized.",
-    });
+    setTimeout(() => {
+      const shuffledCards = [...flashcards];
+      for (let i = shuffledCards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledCards[i], shuffledCards[j]] = [shuffledCards[j], shuffledCards[i]];
+      }
+      setFlashcards(shuffledCards);
+      setCurrentCardIndex(0);
+      setIsFlipped(false);
+      
+      setAnimationState("appearing");
+      toast({
+        title: "Cards Shuffled",
+        description: "The order of your flashcards has been randomized.",
+      });
+      setTimeout(() => {
+        setAnimationState("idle");
+      }, ANIMATION_DURATION);
+    }, ANIMATION_DURATION);
   };
   
   if (!isClient) {
-    // Render nothing or a loading indicator on the server to avoid hydration mismatch
     return null; 
   }
 
   const currentCard = flashcards[currentCardIndex];
+  const isAnimating = animationState !== "idle";
 
   return (
     <main className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-background text-foreground">
@@ -86,10 +113,10 @@ export default function FlashFlowPage() {
 
       <div className="w-full max-w-xl md:max-w-2xl">
         <section className="mb-8 flex justify-center space-x-4">
-          <CsvImportButton onImport={handleImport} />
+          <CsvImportButton onImport={handleImport} disabled={isAnimating} />
           <Button
             onClick={handleShuffle}
-            disabled={flashcards.length <= 1}
+            disabled={flashcards.length <= 1 || isAnimating}
             variant="outline"
             aria-label="Shuffle cards"
           >
@@ -111,6 +138,7 @@ export default function FlashFlowPage() {
                 backText={currentCard.back}
                 isFlipped={isFlipped}
                 onFlip={handleFlip}
+                animationState={animationState}
               />
               <NavigationControls
                 onPrevious={handlePrevious}
@@ -119,6 +147,7 @@ export default function FlashFlowPage() {
                 canPrevious={flashcards.length > 1}
                 canNext={flashcards.length > 1}
                 isFlipped={isFlipped}
+                isAnimating={isAnimating}
               />
             </CardContent>
           </Card>

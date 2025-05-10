@@ -11,6 +11,7 @@ interface NavigationControlsProps {
   canPrevious: boolean;
   canNext: boolean;
   isFlipped: boolean;
+  isAnimating?: boolean;
 }
 
 export function NavigationControls({
@@ -20,25 +21,33 @@ export function NavigationControls({
   canPrevious,
   canNext,
   isFlipped,
+  isAnimating = false,
 }: NavigationControlsProps) {
   return (
     <div className="flex justify-center items-center space-x-4 mt-6">
       <Button
         variant="outline"
         onClick={onPrevious}
-        disabled={!canPrevious}
+        disabled={!canPrevious || isAnimating}
         aria-label="Previous card"
+        aria-busy={isAnimating}
       >
         <ArrowLeft className="mr-2 h-4 w-4" /> Previous
       </Button>
-      <Button onClick={onFlip} aria-label={isFlipped ? "Show front" : "Show back (Flip card)"}>
+      <Button 
+        onClick={onFlip} 
+        aria-label={isFlipped ? "Show front" : "Show back (Flip card)"}
+        disabled={isAnimating}
+        aria-busy={isAnimating}
+      >
         <RefreshCcw className="mr-2 h-4 w-4" /> Flip Card
       </Button>
       <Button
         variant="outline"
         onClick={onNext}
-        disabled={!canNext}
+        disabled={!canNext || isAnimating}
         aria-label="Next card"
+        aria-busy={isAnimating}
       >
         Next <ArrowRight className="ml-2 h-4 w-4" />
       </Button>

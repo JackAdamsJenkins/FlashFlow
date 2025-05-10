@@ -73,16 +73,17 @@ body {
   }
 }
 
-/* Flashcard flip animation styles */
+/* Flashcard animations */
 .flashcard-container {
   perspective: 1000px;
+  /* Transition for properties other than transform might be needed if any */
 }
 
 .flashcard-inner {
   position: relative;
   width: 100%;
   height: 100%;
-  transition: transform 0.7s;
+  transition: transform 0.7s; /* For flip animation */
   transform-style: preserve-3d;
 }
 
@@ -117,4 +118,35 @@ body {
   color: hsl(var(--accent-foreground));
   transform: rotateY(180deg);
   border: 1px solid hsl(var(--accent));
+}
+
+/* Card Destroy and Appear Animations */
+.card-destroy-active {
+  animation: dropAndFadeOut 0.5s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards;
+}
+
+@keyframes dropAndFadeOut {
+  0% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(200px) scale(0.7) rotate(10deg);
+    opacity: 0;
+  }
+}
+
+.card-appear-active {
+  animation: fadeInFromBelow 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+@keyframes fadeInFromBelow {
+  0% {
+    opacity: 0;
+    transform: translateY(100px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }

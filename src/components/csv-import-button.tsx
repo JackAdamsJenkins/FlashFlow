@@ -11,9 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 
 interface CsvImportButtonProps {
   onImport: (flashcards: FlashcardType[]) => void;
+  disabled?: boolean;
 }
 
-export function CsvImportButton({ onImport }: CsvImportButtonProps) {
+export function CsvImportButton({ onImport, disabled = false }: CsvImportButtonProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -45,12 +46,45 @@ export function CsvImportButton({ onImport }: CsvImportButtonProps) {
         .map((line, index) => {
           const values = line.split(","); // Basic CSV split, consider a library for robustness
           
-          let frontValue = values[frontIndex]?.trim() || "";
-          let backValue = values[backIndex]?.trim() || "";
+          // Handle cases where values might be wrapped in quotes or contain commas within quotes
+          // This is a simplified parser. For complex CSV, a proper library is better.
+          const parseCsvRow = (rowString: string): string[] => {
+            const result: string[] = [];
+            let currentField = '';
+            let inQuotes = false;
+            for (let i = 0; i < rowString.length; i++) {
+              const char = rowString[i];
+              if (char === '"') {
+                if (inQuotes && i + 1 < rowString.length && rowString[i+1] === '"') {
+                  // Escaped quote
+                  currentField += '"';
+                  i++; 
+                } else {
+                  inQuotes = !inQuotes;
+                }
+              } else if (char === ',' && !inQuotes) {
+                result.push(currentField);
+                currentField = '';
+              } else {
+                currentField += char;
+              }
+            }
+            result.push(currentField); // Add the last field
+            return result;
+          };
+          
+          const parsedValues = parseCsvRow(line);
 
-          // Remove all double quotes from front and back values
+          let frontValue = parsedValues[frontIndex]?.trim() || "";
+          let backValue = parsedValues[backIndex]?.trim() || "";
+
+          // Remove all double quotes from front and back values if they are not part of escaped quotes
+          // The regex /^\s*"|"\s*$/g targets leading/trailing quotes possibly with spaces.
+          // For internal quotes, if any remain after parsing they might be intentional.
+          // However, the request was to remove *all* double quotes from the final values.
           frontValue = frontValue.replace(/"/g, "");
           backValue = backValue.replace(/"/g, "");
+
 
           return {
             id: `card-${Date.now()}-${index}`, // Simple unique ID
@@ -95,11 +129,12 @@ export function CsvImportButton({ onImport }: CsvImportButtonProps) {
         onChange={handleFileChange}
         className="hidden"
         aria-labelledby="csv-import-button-label"
+        disabled={isLoading || disabled}
       />
       <Button
         id="csv-import-button-label"
         onClick={() => fileInputRef.current?.click()}
-        disabled={isLoading}
+        disabled={isLoading || disabled}
         aria-busy={isLoading}
       >
         <UploadCloud className="mr-2 h-4 w-4" />
