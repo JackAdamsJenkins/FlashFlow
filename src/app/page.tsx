@@ -30,16 +30,28 @@ export default function FlashFlowPage() {
 
   const handleNext = () => {
     if (flashcards.length === 0) return;
-    setCurrentCardIndex((prevIndex) => (prevIndex + 1) % flashcards.length);
-    setIsFlipped(false);
+
+    if (isFlipped) {
+      setIsFlipped(false); // First, flip the current card to front
+    } else {
+      // If card is already front-facing, move to the next card
+      setCurrentCardIndex((prevIndex) => (prevIndex + 1) % flashcards.length);
+      // isFlipped is already false, so the new card will show its front.
+    }
   };
 
   const handlePrevious = () => {
     if (flashcards.length === 0) return;
-    setCurrentCardIndex((prevIndex) =>
-      prevIndex === 0 ? flashcards.length - 1 : prevIndex - 1
-    );
-    setIsFlipped(false);
+
+    if (isFlipped) {
+      setIsFlipped(false); // First, flip the current card to front
+    } else {
+      // If card is already front-facing, move to the previous card
+      setCurrentCardIndex((prevIndex) =>
+        prevIndex === 0 ? flashcards.length - 1 : prevIndex - 1
+      );
+      // isFlipped is already false, so the new card will show its front.
+    }
   };
 
   const handleFlip = () => {
@@ -115,8 +127,8 @@ export default function FlashFlowPage() {
                 onPrevious={handlePrevious}
                 onNext={handleNext}
                 onFlip={handleFlip}
-                canPrevious={flashcards.length > 1}
-                canNext={flashcards.length > 1}
+                canPrevious={flashcards.length > 1 || isFlipped} // Can "previous" if it just means flipping back
+                canNext={flashcards.length > 1 || isFlipped}     // Can "next" if it just means flipping back
                 isFlipped={isFlipped}
               />
             </CardContent>
