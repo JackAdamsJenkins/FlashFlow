@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from "react";
@@ -32,26 +33,22 @@ export function ChoiceModeCard({
   className,
 }: ChoiceModeCardProps) {
   
-  const getButtonVariant = (choice: Choice): "default" | "secondary" | "destructive" | "outline" | "ghost" | "link" | null | undefined => {
+  const getButtonVariant = (choice: Choice): "success" | "destructive" | "default" | "outline" => {
     if (choiceAttempted) {
-      if (choice.isCorrect) return "default"; // Correct answer
-      if (choice.id === selectedChoiceId && !choice.isCorrect) return "destructive"; // Incorrect selected answer
+      if (choice.id === selectedChoiceId) { // The choice selected by the user
+        return choice.isCorrect ? "success" : "destructive";
+      } else if (choice.isCorrect) { // Other correct answers (not selected by user but revealed after an attempt)
+        return "default"; // Highlight other correct answers with primary theme color
+      }
     }
-    return "outline"; // Default or unselected
+    return "outline"; // Default for unselected, before attempt, or incorrect unselected after attempt
   };
   
-  const getButtonTextColor = (choice: Choice): string => {
-    if (choiceAttempted) {
-      if (choice.isCorrect) return "text-primary-foreground"; 
-      if (choice.id === selectedChoiceId && !choice.isCorrect) return "text-destructive-foreground";
-    }
-    return ""; 
-  }
 
   return (
     <div
       className={cn(
-        "flashcard-container w-full min-h-[24rem] md:min-h-[26rem] flex flex-col", // Adjusted min-height
+        "flashcard-container w-full min-h-[24rem] md:min-h-[26rem] flex flex-col", 
         {
           "card-destroy-active": animationState === "destroying",
           "card-appear-active": animationState === "appearing",
@@ -69,7 +66,7 @@ export function ChoiceModeCard({
           <Button
             key={choice.id}
             variant={getButtonVariant(choice)}
-            className={cn("w-full justify-start text-left p-4 h-auto min-h-[3.5rem] whitespace-normal break-words", getButtonTextColor(choice))}
+            className={cn("w-full justify-start text-left p-4 h-auto min-h-[3.5rem] whitespace-normal break-words")}
             onClick={() => onSelectChoice(choice.id)}
             disabled={choiceAttempted || animationState !== "idle"}
             aria-pressed={selectedChoiceId === choice.id}

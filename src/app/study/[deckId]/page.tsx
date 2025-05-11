@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -51,12 +52,20 @@ export default function StudyDeckPage() {
   const [choices, setChoices] = useState<Choice[]>([]);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [choiceAttempted, setChoiceAttempted] = useState<boolean>(false);
+  const [sessionCorrectAnswers, setSessionCorrectAnswers] = useState(0);
+  const [sessionIncorrectAnswers, setSessionIncorrectAnswers] = useState(0);
+
 
   // Timer State
   const [currentCardTimer, setCurrentCardTimer] = useState<number>(0);
   const [totalDeckTimer, setTotalDeckTimer] = useState<number>(0);
 
   const currentCard = flashcards[currentCardIndex];
+
+  const resetSessionScore = () => {
+    setSessionCorrectAnswers(0);
+    setSessionIncorrectAnswers(0);
+  };
 
   // Load deck and initialize
   useEffect(() => {
@@ -73,6 +82,7 @@ export default function StudyDeckPage() {
         setIsFlipped(false);
         setChoiceAttempted(false);
         setSelectedChoiceId(null);
+        resetSessionScore();
       } else {
         toast({
           variant: "destructive",
@@ -109,7 +119,7 @@ export default function StudyDeckPage() {
     if (studyMode === 'choice' && currentCard && flashcards.length > 0) {
       if (flashcards.length < 2) {
         setChoices([]);
-        if (studyMode === 'choice') { // Only toast if actively in choice mode
+        if (studyMode === 'choice') { 
             toast({ title: "Not Enough Cards", description: "Choice mode requires at least 2 cards.", variant: "default" });
         }
         return;
@@ -118,11 +128,11 @@ export default function StudyDeckPage() {
       const correctAnswer = { text: currentCard.back, isCorrect: true, id: `choice-correct-${currentCard.id}-${Date.now()}` };
       
       let incorrectAnswersPool = flashcards.filter(card => card.id !== currentCard.id);
-      incorrectAnswersPool = [...incorrectAnswersPool].sort(() => 0.5 - Math.random()); // Shuffle
+      incorrectAnswersPool = [...incorrectAnswersPool].sort(() => 0.5 - Math.random()); 
 
       const uniqueIncorrectBacks = new Set<string>();
       for (const card of incorrectAnswersPool) {
-          if (card.back !== correctAnswer.text) { // Ensure incorrect is different from correct
+          if (card.back !== correctAnswer.text) { 
               uniqueIncorrectBacks.add(card.back);
           }
           if (uniqueIncorrectBacks.size >= 3) break; 
@@ -135,9 +145,9 @@ export default function StudyDeckPage() {
       }));
 
       let finalChoices = [correctAnswer, ...incorrectAnswers];
-      finalChoices = finalChoices.sort(() => 0.5 - Math.random()); // Shuffle final set
+      finalChoices = finalChoices.sort(() => 0.5 - Math.random()); 
       
-      setChoices(finalChoices.slice(0, 4)); // Max 4 choices
+      setChoices(finalChoices.slice(0, 4)); 
       setSelectedChoiceId(null);
       setChoiceAttempted(false);
     } else {
@@ -147,10 +157,10 @@ export default function StudyDeckPage() {
 
   useEffect(() => {
     generateAndSetChoices();
-  }, [generateAndSetChoices]); // generateAndSetChoices is memoized and includes its dependencies
+  }, [generateAndSetChoices]); 
 
   // Timers
-  useEffect(() => { // Total Deck Timer
+  useEffect(() => { 
     if (!currentDeck || !isDecksDataLoaded) return;
     setTotalDeckTimer(0);
     const intervalId = setInterval(() => {
@@ -159,14 +169,13 @@ export default function StudyDeckPage() {
     return () => clearInterval(intervalId);
   }, [currentDeck, isDecksDataLoaded]);
 
-  useEffect(() => { // Current Card Timer
+  useEffect(() => { 
     if (!currentCard) {
       setCurrentCardTimer(0);
       return;
     }
     setCurrentCardTimer(0);
     const intervalId = setInterval(() => {
-      // Stop timer if choice made and in choice mode
       if (studyMode === 'choice' && choiceAttempted) {
         clearInterval(intervalId);
         return;
@@ -216,11 +225,17 @@ export default function StudyDeckPage() {
     setChoiceAttempted(true);
     const choice = choices.find(c => c.id === choiceId);
     if (choice) {
-        toast({
-            title: choice.isCorrect ? "Correct!" : "Incorrect",
-            description: choice.isCorrect ? "Well done!" : `The correct answer was highlighted.`,
-            variant: choice.isCorrect ? "default" : "destructive",
-        });
+        if (choice.isCorrect) {
+            setSessionCorrectAnswers(prev => prev + 1);
+            // No toast for correct answer
+        } else {
+            setSessionIncorrectAnswers(prev => prev + 1);
+            toast({
+                title: "Incorrect",
+                description: `The correct answer was highlighted.`,
+                variant: "destructive",
+            });
+        }
     }
   };
 
@@ -228,6 +243,7 @@ export default function StudyDeckPage() {
     if (flashcards.length <= 1 || animationState !== "idle" || !currentDeck) return;
     
     setAnimationState("destroying");
+    resetSessionScore();
 
     setTimeout(() => {
       const shuffled = [...flashcards];
@@ -305,14 +321,14 @@ export default function StudyDeckPage() {
     const newMode = checked ? 'choice' : 'flip';
     if (newMode === 'choice' && flashcards.length < 2) {
         toast({ title: "Choice Mode Unavailable", description: "This mode requires at least 2 cards in the deck." });
-        setStudyMode('flip'); // Stay in flip mode
+        setStudyMode('flip'); 
         return;
     }
     setStudyMode(newMode);
     setIsFlipped(false);
     setChoiceAttempted(false);
     setSelectedChoiceId(null);
-    // Choices will be regenerated by useEffect watching studyMode and currentCard
+    resetSessionScore();
   };
 
 
@@ -367,6 +383,13 @@ export default function StudyDeckPage() {
                     {studyMode === 'flip' && flashcards.length < 2 && " (Needs ≥2 cards for Choice)"}
                 </Label>
             </div>
+            {studyMode === 'choice' && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium" style={{color: 'hsl(var(--success))'}}>Correct: {sessionCorrectAnswers}</span>
+                <span className="text-muted-foreground">|</span>
+                <span className="font-medium text-destructive">Incorrect: {sessionIncorrectAnswers}</span>
+              </div>
+            )}
             <div className="flex gap-4">
                 <TimerDisplay seconds={currentCardTimer} label="Card Time" />
                 <TimerDisplay seconds={totalDeckTimer} label="Total Time" />
@@ -428,9 +451,9 @@ export default function StudyDeckPage() {
                  <NavigationControls
                     onPrevious={handlePrevious}
                     onNext={handleNext}
-                    onFlip={handleFlip} // Will be ignored in choice mode due to showFlipButton
+                    onFlip={handleFlip} 
                     canPrevious={flashcards.length > 1}
-                    canNext={flashcards.length > 1 && (studyMode === 'flip' || (studyMode === 'choice' && choiceAttempted))} // Allow next in choice mode only after attempt
+                    canNext={flashcards.length > 1 && (studyMode === 'flip' || (studyMode === 'choice' && choiceAttempted))} 
                     isFlipped={isFlipped}
                     isAnimating={isAnimating}
                     showFlipButton={studyMode === 'flip'}
