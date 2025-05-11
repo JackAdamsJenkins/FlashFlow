@@ -1,8 +1,8 @@
+
 "use client"
 
 import * as React from "react"
-import *import type { Label } from "@/components/ui/label"; // This import seems incorrect for this file. Removing.
-SwitchPrimitives from "@radix-ui/react-switch"
+import * as SwitchPrimitives from "@radix-ui/react-switch"
 
 import { cn } from "@/lib/utils"
 
@@ -28,3 +28,4 @@ const Switch = React.forwardRef<
 Switch.displayName = SwitchPrimitives.Root.displayName
 
 export { Switch }
+
