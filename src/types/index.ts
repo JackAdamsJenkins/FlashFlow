@@ -11,3 +11,5 @@ export interface Deck {
   createdAt: number; // Unix timestamp
   updatedAt: number; // Unix timestamp
 }
+
+export type AnimationState = "idle" | "destroying" | "appearing";

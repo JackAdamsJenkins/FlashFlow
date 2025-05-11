@@ -1,24 +1,33 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from 'next/navigation'; // Use next/navigation for App Router
+import { useParams, useRouter } from 'next/navigation';
 import Link from "next/link";
 import { useDecks } from "@/hooks/use-decks";
-import type { FlashcardType, Deck } from "@/types";
+import type { FlashcardType, Deck, AnimationState } from "@/types";
 import { FlashcardDisplay } from "@/components/flashcard-display";
+import { ChoiceModeCard } from "@/components/choice-mode-card";
 import { NavigationControls } from "@/components/navigation-controls";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { TimerDisplay } from "@/components/timer-display";
 import { ArrowLeftToLine, BookOpenText, Edit, Shuffle, Trash2, PlusCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DeleteCardDialog } from "@/components/dialogs/delete-card-dialog";
 import { EditCardDialog } from "@/components/dialogs/edit-card-dialog";
 import { AddCardDialog } from "@/components/dialogs/add-card-dialog";
+import { cn } from "@/lib/utils";
 
 
-type AnimationState = "idle" | "destroying" | "appearing";
 const ANIMATION_DURATION = 500; // ms
+
+interface Choice {
+  id: string;
+  text: string;
+  isCorrect: boolean;
+}
 
 export default function StudyDeckPage() {
   const router = useRouter();
@@ -37,6 +46,19 @@ export default function StudyDeckPage() {
   const [cardToEdit, setCardToEdit] = useState<FlashcardType | null>(null);
   const [isAddCardDialogOpen, setIsAddCardDialogOpen] = useState(false);
 
+  // Choice Mode State
+  const [studyMode, setStudyMode] = useState<'flip' | 'choice'>('flip');
+  const [choices, setChoices] = useState<Choice[]>([]);
+  const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
+  const [choiceAttempted, setChoiceAttempted] = useState<boolean>(false);
+
+  // Timer State
+  const [currentCardTimer, setCurrentCardTimer] = useState<number>(0);
+  const [totalDeckTimer, setTotalDeckTimer] = useState<number>(0);
+
+  const currentCard = flashcards[currentCardIndex];
+
+  // Load deck and initialize
   useEffect(() => {
     if (!isDecksDataLoaded) { 
       setCurrentDeck(null); 
@@ -49,6 +71,8 @@ export default function StudyDeckPage() {
         setCurrentDeck(deck);
         setCurrentCardIndex(0);
         setIsFlipped(false);
+        setChoiceAttempted(false);
+        setSelectedChoiceId(null);
       } else {
         toast({
           variant: "destructive",
@@ -69,7 +93,7 @@ export default function StudyDeckPage() {
       if (currentDeck.flashcards.length > 0) {
         if (currentCardIndex >= currentDeck.flashcards.length) {
           setCurrentCardIndex(currentDeck.flashcards.length - 1);
-        } else if (currentCardIndex < 0) { // Ensure index is not negative if all cards are deleted then one is added
+        } else if (currentCardIndex < 0) {
            setCurrentCardIndex(0);
         }
       } else {
@@ -80,6 +104,78 @@ export default function StudyDeckPage() {
     }
   }, [currentDeck, currentCardIndex]);
 
+  // Generate choices for Choice Mode
+  const generateAndSetChoices = useCallback(() => {
+    if (studyMode === 'choice' && currentCard && flashcards.length > 0) {
+      if (flashcards.length < 2) {
+        setChoices([]);
+        if (studyMode === 'choice') { // Only toast if actively in choice mode
+            toast({ title: "Not Enough Cards", description: "Choice mode requires at least 2 cards.", variant: "default" });
+        }
+        return;
+      }
+
+      const correctAnswer = { text: currentCard.back, isCorrect: true, id: `choice-correct-${currentCard.id}-${Date.now()}` };
+      
+      let incorrectAnswersPool = flashcards.filter(card => card.id !== currentCard.id);
+      incorrectAnswersPool = [...incorrectAnswersPool].sort(() => 0.5 - Math.random()); // Shuffle
+
+      const uniqueIncorrectBacks = new Set<string>();
+      for (const card of incorrectAnswersPool) {
+          if (card.back !== correctAnswer.text) { // Ensure incorrect is different from correct
+              uniqueIncorrectBacks.add(card.back);
+          }
+          if (uniqueIncorrectBacks.size >= 3) break; 
+      }
+      
+      const incorrectAnswers = Array.from(uniqueIncorrectBacks).map((back, index) => ({
+          text: back,
+          isCorrect: false,
+          id: `choice-incorrect-${currentCard.id}-${index}-${Date.now()}`
+      }));
+
+      let finalChoices = [correctAnswer, ...incorrectAnswers];
+      finalChoices = finalChoices.sort(() => 0.5 - Math.random()); // Shuffle final set
+      
+      setChoices(finalChoices.slice(0, 4)); // Max 4 choices
+      setSelectedChoiceId(null);
+      setChoiceAttempted(false);
+    } else {
+      setChoices([]);
+    }
+  }, [studyMode, currentCard, flashcards, toast]);
+
+  useEffect(() => {
+    generateAndSetChoices();
+  }, [generateAndSetChoices]); // generateAndSetChoices is memoized and includes its dependencies
+
+  // Timers
+  useEffect(() => { // Total Deck Timer
+    if (!currentDeck || !isDecksDataLoaded) return;
+    setTotalDeckTimer(0);
+    const intervalId = setInterval(() => {
+      setTotalDeckTimer(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, [currentDeck, isDecksDataLoaded]);
+
+  useEffect(() => { // Current Card Timer
+    if (!currentCard) {
+      setCurrentCardTimer(0);
+      return;
+    }
+    setCurrentCardTimer(0);
+    const intervalId = setInterval(() => {
+      // Stop timer if choice made and in choice mode
+      if (studyMode === 'choice' && choiceAttempted) {
+        clearInterval(intervalId);
+        return;
+      }
+      setCurrentCardTimer(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, [currentCard, studyMode, choiceAttempted]);
+
 
   const changeCard = useCallback((direction: "next" | "prev") => {
     if (flashcards.length === 0 || animationState !== "idle") return;
@@ -88,6 +184,9 @@ export default function StudyDeckPage() {
 
     setTimeout(() => {
       setIsFlipped(false);
+      setChoiceAttempted(false);
+      setSelectedChoiceId(null);
+      
       if (direction === "next") {
         setCurrentCardIndex((prevIndex) => (prevIndex + 1) % flashcards.length);
       } else {
@@ -107,8 +206,22 @@ export default function StudyDeckPage() {
   const handlePrevious = () => changeCard("prev");
 
   const handleFlip = () => {
-    if (flashcards.length === 0 || animationState !== "idle") return;
+    if (flashcards.length === 0 || animationState !== "idle" || studyMode === 'choice') return;
     setIsFlipped((prevFlipped) => !prevFlipped);
+  };
+  
+  const handleSelectChoice = (choiceId: string) => {
+    if (choiceAttempted || animationState !== "idle") return;
+    setSelectedChoiceId(choiceId);
+    setChoiceAttempted(true);
+    const choice = choices.find(c => c.id === choiceId);
+    if (choice) {
+        toast({
+            title: choice.isCorrect ? "Correct!" : "Incorrect",
+            description: choice.isCorrect ? "Well done!" : `The correct answer was highlighted.`,
+            variant: choice.isCorrect ? "default" : "destructive",
+        });
+    }
   };
 
   const handleShuffle = () => {
@@ -127,6 +240,8 @@ export default function StudyDeckPage() {
       
       setCurrentCardIndex(0);
       setIsFlipped(false);
+      setChoiceAttempted(false);
+      setSelectedChoiceId(null);
       setAnimationState("appearing");
 
       toast({
@@ -145,19 +260,18 @@ export default function StudyDeckPage() {
     const updatedD = deleteCardFromDeck(currentDeck.id, cardId);
     if (updatedD) {
       setCurrentDeck(updatedD); 
-      // setCurrentDeck will trigger the useEffect to update flashcards and potentially currentCardIndex
-      // If the deleted card was the current one, and it wasn't the only card,
-      // try to stay on the "same" visual position or move to previous if it was last
       if (updatedD.flashcards.length < originalFlashcardsLength && updatedD.flashcards.length > 0) {
-         if (originalIndex >= updatedD.flashcards.length) { // If last card was deleted
+         if (originalIndex >= updatedD.flashcards.length) {
             setCurrentCardIndex(updatedD.flashcards.length -1);
          } else {
-            setCurrentCardIndex(originalIndex); // Stay at current index if possible (new card takes its place)
+            setCurrentCardIndex(originalIndex); 
          }
       } else if (updatedD.flashcards.length === 0) {
         setCurrentCardIndex(0);
       }
       setIsFlipped(false);
+      setChoiceAttempted(false);
+      setSelectedChoiceId(null);
       toast({ title: "Card Deleted" });
     }
     setCardToDelete(null);
@@ -177,7 +291,7 @@ export default function StudyDeckPage() {
     if (currentDeck) {
       const updatedDeck = addCardToDeck(currentDeck.id, { front, back });
       if (updatedDeck) {
-        setCurrentDeck(updatedDeck); // This will trigger useEffect to update flashcards
+        setCurrentDeck(updatedDeck);
         toast({
           title: "Card Added",
           description: "A new card has been added to the deck.",
@@ -186,8 +300,22 @@ export default function StudyDeckPage() {
     }
     setIsAddCardDialogOpen(false);
   };
+  
+  const handleModeToggle = (checked: boolean) => {
+    const newMode = checked ? 'choice' : 'flip';
+    if (newMode === 'choice' && flashcards.length < 2) {
+        toast({ title: "Choice Mode Unavailable", description: "This mode requires at least 2 cards in the deck." });
+        setStudyMode('flip'); // Stay in flip mode
+        return;
+    }
+    setStudyMode(newMode);
+    setIsFlipped(false);
+    setChoiceAttempted(false);
+    setSelectedChoiceId(null);
+    // Choices will be regenerated by useEffect watching studyMode and currentCard
+  };
 
-  const currentCard = flashcards[currentCardIndex];
+
   const isAnimating = animationState !== "idle";
 
   if (!isDecksDataLoaded && !currentDeck) {
@@ -206,8 +334,8 @@ export default function StudyDeckPage() {
 
   return (
     <main className="flex flex-col items-center min-h-screen p-4 md:p-8 bg-background text-foreground">
-      <header className="mb-8 text-center w-full max-w-2xl">
-        <div className="flex items-center justify-between">
+      <header className="mb-4 text-center w-full max-w-2xl">
+        <div className="flex items-center justify-between mb-2">
           <Link href="/" passHref>
             <Button variant="outline" size="sm">
               <ArrowLeftToLine className="mr-2 h-4 w-4" /> Decks
@@ -225,43 +353,101 @@ export default function StudyDeckPage() {
             </Button>
            </div>
         </div>
+        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2 sm:gap-4 my-2 p-2 border rounded-md bg-card">
+            <div className="flex items-center space-x-2">
+                <Switch
+                    id="study-mode-toggle"
+                    checked={studyMode === 'choice'}
+                    onCheckedChange={handleModeToggle}
+                    disabled={isAnimating}
+                    aria-label={`Switch to ${studyMode === 'flip' ? 'Choice' : 'Flip'} Mode`}
+                />
+                <Label htmlFor="study-mode-toggle">
+                    {studyMode === 'choice' ? 'Choice Mode' : 'Flip Mode'}
+                    {studyMode === 'flip' && flashcards.length < 2 && " (Needs ≥2 cards for Choice)"}
+                </Label>
+            </div>
+            <div className="flex gap-4">
+                <TimerDisplay seconds={currentCardTimer} label="Card Time" />
+                <TimerDisplay seconds={totalDeckTimer} label="Total Time" />
+            </div>
+        </div>
       </header>
 
       <div className="w-full max-w-xl md:max-w-2xl">
         {flashcards.length > 0 && currentCard ? (
-          <Card className="shadow-xl overflow-hidden">
-            <CardHeader className="pb-2 flex flex-row justify-between items-center">
-              <CardTitle className="text-sm text-muted-foreground text-center">
-                Card {currentCardIndex + 1} of {flashcards.length}
-              </CardTitle>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="icon" onClick={() => setCardToEdit(currentCard)} aria-label="Edit card" disabled={isAnimating}>
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => setCardToDelete(currentCard)} aria-label="Delete card" disabled={isAnimating}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <FlashcardDisplay
-                frontText={currentCard.front}
-                backText={currentCard.back}
-                isFlipped={isFlipped}
-                onFlip={handleFlip}
-                animationState={animationState}
-              />
-              <NavigationControls
-                onPrevious={handlePrevious}
-                onNext={handleNext}
-                onFlip={handleFlip}
-                canPrevious={flashcards.length > 1}
-                canNext={flashcards.length > 1}
-                isFlipped={isFlipped}
-                isAnimating={isAnimating}
-              />
-            </CardContent>
-          </Card>
+          <>
+            <Card className={cn("shadow-xl overflow-hidden", studyMode === 'choice' ? "bg-transparent border-none shadow-none" : "")}>
+              {studyMode === 'flip' && (
+                 <CardHeader className="pb-2 flex flex-row justify-between items-center">
+                    <CardTitle className="text-sm text-muted-foreground text-center">
+                    Card {currentCardIndex + 1} of {flashcards.length}
+                    </CardTitle>
+                    <div className="flex gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => setCardToEdit(currentCard)} aria-label="Edit card" disabled={isAnimating}>
+                        <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setCardToDelete(currentCard)} aria-label="Delete card" disabled={isAnimating}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                    </div>
+                </CardHeader>
+              )}
+             
+              <CardContent className={cn(studyMode === 'choice' ? "p-0" : "")}>
+                {studyMode === 'flip' ? (
+                    <FlashcardDisplay
+                        frontText={currentCard.front}
+                        backText={currentCard.back}
+                        isFlipped={isFlipped}
+                        onFlip={handleFlip}
+                        animationState={animationState}
+                    />
+                ) : (
+                    choices.length > 0 ? (
+                        <ChoiceModeCard
+                            frontText={currentCard.front}
+                            choices={choices}
+                            onSelectChoice={handleSelectChoice}
+                            selectedChoiceId={selectedChoiceId}
+                            choiceAttempted={choiceAttempted}
+                            animationState={animationState}
+                        />
+                    ) : (
+                         <Card className="shadow-lg "><CardContent className="p-8 text-center min-h-[20rem] flex flex-col justify-center items-center">
+                            <BookOpenText size={48} className="mx-auto mb-4 text-muted-foreground" />
+                            <h2 className="text-xl font-semibold mb-2">
+                                {(flashcards.length < 2 && studyMode === 'choice') ? "Choice Mode Unavailable" : "Loading Choices..."}
+                            </h2>
+                            <p className="text-muted-foreground">
+                                {(flashcards.length < 2 && studyMode === 'choice') ? "This mode requires at least 2 cards in the deck." : "Please wait or try Flip Mode."}
+                            </p>
+                        </CardContent></Card>
+                    )
+                )}
+                 <NavigationControls
+                    onPrevious={handlePrevious}
+                    onNext={handleNext}
+                    onFlip={handleFlip} // Will be ignored in choice mode due to showFlipButton
+                    canPrevious={flashcards.length > 1}
+                    canNext={flashcards.length > 1 && (studyMode === 'flip' || (studyMode === 'choice' && choiceAttempted))} // Allow next in choice mode only after attempt
+                    isFlipped={isFlipped}
+                    isAnimating={isAnimating}
+                    showFlipButton={studyMode === 'flip'}
+                />
+                 {studyMode === 'choice' && (
+                    <div className="mt-4 flex justify-end gap-2">
+                         <Button variant="ghost" size="icon" onClick={() => setCardToEdit(currentCard)} aria-label="Edit card" disabled={isAnimating}>
+                            <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setCardToDelete(currentCard)} aria-label="Delete card" disabled={isAnimating}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                    </div>
+                 )}
+              </CardContent>
+            </Card>
+          </>
         ) : (
           <Card className="shadow-lg">
             <CardContent className="p-8 text-center">
@@ -315,4 +501,3 @@ export default function StudyDeckPage() {
     </main>
   );
 }
-
